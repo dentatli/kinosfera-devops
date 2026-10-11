@@ -1,0 +1,11 @@
+all:
+  children:
+    kinosfera:
+      hosts:
+        main:
+          ansible_host: 192.168.1.50
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+          kinosfera_bind_ip: 192.168.1.50
+          kinosfera_tls_domain: bingo.example.com
+          kinosfera_student_email: student@example.com

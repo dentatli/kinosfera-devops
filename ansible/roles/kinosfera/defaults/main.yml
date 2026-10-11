@@ -1,0 +1,18 @@
+---
+kinosfera_project_dir: /opt/kinosfera
+kinosfera_source_dir: "{{ playbook_dir | dirname }}"
+kinosfera_payload_path: "{{ playbook_dir | dirname }}/.state/ansible/payload.tar.gz"
+kinosfera_bind_ip: "{{ ansible_facts.default_ipv4.address }}"
+kinosfera_tls_domain: kinosfera.test
+kinosfera_tls_cert_mode: selfsigned
+kinosfera_student_email: ''
+kinosfera_force_deploy: false
+kinosfera_services:
+  - app1
+  - app2
+  - balancer
+  - edge
+  - grafana
+  - metrics
+  - postgres
+  - prometheus

@@ -1,0 +1,14 @@
+.env
+.state/
+certs/
+config/bingo.yaml
+ansible/inventory.yml
+reports/
+__pycache__/
+*.pyc
+*.key
+*.pem
+*.tar.gz
+.venv/
+.idea/
+.vscode/

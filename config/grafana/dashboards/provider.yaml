@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: Kinosfera
+    folder: Kinosfera
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

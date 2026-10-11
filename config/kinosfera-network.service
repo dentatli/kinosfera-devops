@@ -1,0 +1,14 @@
+[Unit]
+Description=Kinosfera application startup network workaround
+Requires=docker.service
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/kinosfera
+ExecStart=/bin/bash /opt/kinosfera/scripts/ensure-network-rule.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

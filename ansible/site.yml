@@ -1,0 +1,8 @@
+---
+- name: Install and verify Kinosfera
+  hosts: kinosfera
+  become: true
+  gather_facts: true
+  serial: 1
+  roles:
+    - kinosfera

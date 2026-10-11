@@ -1,0 +1,12 @@
+all:
+  children:
+    kinosfera:
+      hosts:
+        main:
+          ansible_host: 127.0.0.1
+          ansible_connection: ansible.builtin.local
+          ansible_python_interpreter: /usr/bin/python3
+          kinosfera_bind_ip: 192.168.1.50
+          kinosfera_tls_domain: bingo.example.com
+          kinosfera_tls_cert_mode: selfsigned
+          kinosfera_student_email: student@example.com

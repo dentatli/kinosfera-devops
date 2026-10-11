@@ -1,0 +1,8 @@
+---
+- name: Deploy Kinosfera
+  ansible.builtin.command:
+    argv: [bash, scripts/install.sh]
+    chdir: "{{ kinosfera_project_dir }}"
+  async: 1800
+  poll: 5
+  when: not ansible_check_mode

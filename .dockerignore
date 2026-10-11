@@ -1,0 +1,10 @@
+.git
+tmp
+.env
+certs
+reports
+.state
+config/bingo.yaml
+*.pdf
+*.tar.gz
+research

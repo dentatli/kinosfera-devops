@@ -1,0 +1,260 @@
+---
+- name: Validate supported target and deployment parameters
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version == '22.04'
+      - ansible_facts.architecture == 'x86_64'
+      - kinosfera_project_dir == '/opt/kinosfera'
+      - kinosfera_bind_ip is match('^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - kinosfera_tls_domain is match('^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$')
+      - kinosfera_tls_cert_mode in ['selfsigned', 'provided']
+      - kinosfera_student_email is match('^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+$')
+    fail_msg: Configure an Ubuntu 22.04 x86-64 target, /opt/kinosfera and valid deployment variables.
+
+- name: Install deployment dependencies without upgrading installed packages
+  ansible.builtin.apt:
+    name: [python3, curl, openssl, iptables, ca-certificates, tar]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Check Docker and Compose availability
+  ansible.builtin.command:
+    argv: "{{ item }}"
+  loop:
+    - [docker, version, --format, "{{ '{{.Server.Version}}' }}"]
+    - [docker, compose, version]
+  register: kinosfera_docker_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Docker and Compose when missing
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2]
+    state: present
+  when: kinosfera_docker_probe.results | selectattr('rc', 'ne', 0) | list | length > 0
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Read NTP enablement
+  ansible.builtin.command:
+    argv: [timedatectl, show, --property=NTP, --value]
+  register: kinosfera_ntp_enabled
+  changed_when: false
+  check_mode: false
+
+- name: Enable time synchronization when disabled
+  ansible.builtin.command:
+    argv: [timedatectl, set-ntp, 'true']
+  when: kinosfera_ntp_enabled.stdout != 'yes'
+
+- name: Create deployment and private state directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ kinosfera_project_dir }}", mode: '0755'}
+    - {path: "{{ kinosfera_project_dir }}/.state", mode: '0700'}
+    - {path: "{{ kinosfera_project_dir }}/.state/ansible", mode: '0700'}
+
+- name: Build deterministic deployment archive on controller
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - "{{ playbook_dir }}/build_payload.py"
+      - --source
+      - "{{ kinosfera_source_dir }}"
+      - --output
+      - "{{ kinosfera_payload_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  check_mode: false
+
+- name: Copy public deployment inputs
+  ansible.builtin.copy:
+    src: "{{ kinosfera_payload_path }}"
+    dest: "{{ kinosfera_project_dir }}/.state/ansible/payload.tar.gz"
+    owner: root
+    group: root
+    mode: '0600'
+  register: kinosfera_payload_copy
+  notify: Deploy Kinosfera
+
+- name: Inspect required deployment files and initialization markers
+  ansible.builtin.stat:
+    path: "{{ kinosfera_project_dir }}/{{ item }}"
+  loop:
+    - compose.yaml
+    - scripts/deploy.sh
+    - config/nginx.conf
+    - config/haproxy.cfg
+    - .state/prepared
+    - .state/indexes
+  register: kinosfera_required_files
+
+- name: Extract changed or incomplete deployment
+  ansible.builtin.unarchive:
+    src: "{{ kinosfera_project_dir }}/.state/ansible/payload.tar.gz"
+    dest: "{{ kinosfera_project_dir }}"
+    remote_src: true
+  when: >-
+    kinosfera_payload_copy.changed or
+    kinosfera_required_files.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+  notify: Deploy Kinosfera
+
+- name: Create initial environment without replacing existing credentials
+  ansible.builtin.copy:
+    dest: "{{ kinosfera_project_dir }}/.env"
+    content: |
+      STUDENT_EMAIL={{ kinosfera_student_email }}
+      POSTGRES_PASSWORD={{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['hexdigits']) | lower }}
+      GRAFANA_PASSWORD={{ lookup('ansible.builtin.password', '/dev/null', length=48, chars=['hexdigits']) | lower }}
+      HTTP_PORT=80
+      SERVER_BIND_IP={{ kinosfera_bind_ip }}
+      TLS_DOMAIN={{ kinosfera_tls_domain }}
+      TLS_CERT_MODE={{ kinosfera_tls_cert_mode }}
+    force: false
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Deploy Kinosfera
+
+- name: Update public environment settings while preserving passwords
+  ansible.builtin.lineinfile:
+    path: "{{ kinosfera_project_dir }}/.env"
+    regexp: "^{{ item.name }}="
+    line: "{{ item.name }}={{ item.value }}"
+    owner: root
+    group: root
+    mode: '0600'
+  loop:
+    - {name: STUDENT_EMAIL, value: "{{ kinosfera_student_email }}"}
+    - {name: SERVER_BIND_IP, value: "{{ kinosfera_bind_ip }}"}
+    - {name: TLS_DOMAIN, value: "{{ kinosfera_tls_domain }}"}
+    - {name: TLS_CERT_MODE, value: "{{ kinosfera_tls_cert_mode }}"}
+  no_log: true
+  diff: false
+  notify: Deploy Kinosfera
+  when: not ansible_check_mode
+
+- name: Inspect running service names
+  ansible.builtin.command:
+    argv: [docker, compose, ps, --services, --filter, 'status=running']
+    chdir: "{{ kinosfera_project_dir }}"
+  register: kinosfera_running
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Inspect health of applications and database
+  ansible.builtin.command:
+    argv: [docker, compose, ps, --format, "{{ '{{.Health}}' }}", app1, app2, postgres]
+    chdir: "{{ kinosfera_project_dir }}"
+  register: kinosfera_health
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Schedule deployment for missing markers or incomplete service state
+  ansible.builtin.debug:
+    msg: Deployment is required to restore the requested state.
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - >-
+      kinosfera_force_deploy | bool or
+      kinosfera_required_files.results | selectattr('stat.exists', 'equalto', false) | list | length > 0 or
+      (kinosfera_running.stdout_lines | sort) != (kinosfera_services | sort) or
+      kinosfera_health.stdout_lines | select('equalto', 'healthy') | list | length != 3
+  notify: Deploy Kinosfera
+
+- name: Apply deployment before acceptance checks
+  ansible.builtin.meta: flush_handlers
+
+- name: Keep the startup network rule enabled
+  ansible.builtin.systemd_service:
+    name: kinosfera-network
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Verify Compose configuration
+  ansible.builtin.command:
+    argv: [docker, compose, config, --quiet]
+    chdir: "{{ kinosfera_project_dir }}"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Verify HTTP without redirects
+  ansible.builtin.uri:
+    url: "http://{{ kinosfera_bind_ip }}/ping"
+    use_proxy: false
+    follow_redirects: none
+    return_content: true
+    status_code: 200
+  register: kinosfera_ping
+  failed_when: kinosfera_ping.status != 200 or kinosfera_ping.content != 'pong\n'
+  when: not ansible_check_mode
+
+- name: Verify HTTPS with the deployment certificate and correct DNS name
+  ansible.builtin.command:
+    argv:
+      - curl
+      - --fail
+      - --silent
+      - --show-error
+      - --noproxy
+      - '*'
+      - --max-time
+      - '5'
+      - --cacert
+      - "{{ kinosfera_project_dir }}/certs/server.crt"
+      - --resolve
+      - "{{ kinosfera_tls_domain }}:443:{{ kinosfera_bind_ip }}"
+      - "https://{{ kinosfera_tls_domain }}/ping"
+  register: kinosfera_https
+  changed_when: false
+  failed_when: kinosfera_https.rc != 0 or kinosfera_https.stdout != 'pong'
+  when: not ansible_check_mode
+
+- name: Verify time synchronization
+  ansible.builtin.command:
+    argv: [timedatectl, show, --property=NTPSynchronized, --value]
+  register: kinosfera_ntp
+  changed_when: false
+  until: kinosfera_ntp.stdout == 'yes'
+  retries: 10
+  delay: 3
+  when: not ansible_check_mode
+
+- name: Read monitoring targets
+  ansible.builtin.uri:
+    url: http://127.0.0.1:19090/api/v1/targets
+    use_proxy: false
+    status_code: 200
+  register: kinosfera_targets
+  until: >-
+    kinosfera_targets.json.data.activeTargets | length == 2 and
+    kinosfera_targets.json.data.activeTargets | selectattr('health', 'equalto', 'up') | list | length == 2
+  retries: 10
+  delay: 3
+  when: not ansible_check_mode
+
+- name: Verify monitoring targets are up
+  ansible.builtin.assert:
+    that:
+      - kinosfera_targets.json.data.activeTargets | length == 2
+      - kinosfera_targets.json.data.activeTargets | selectattr('health', 'equalto', 'up') | list | length == 2
+  when: not ansible_check_mode

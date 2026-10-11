@@ -1,0 +1,139 @@
+name: kinosfera
+
+x-app: &app
+  image: kinosfera-bingo:local
+  build: .
+  restart: unless-stopped
+  mem_limit: 2g
+  environment:
+    STUDENT_EMAIL: ${STUDENT_EMAIL:?Set STUDENT_EMAIL}
+    BINGO_PORT: ${BINGO_PORT:?Set BINGO_PORT}
+  volumes:
+    - ./config/bingo.yaml:/opt/bingo/config.yaml:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    test: [CMD-SHELL, 'curl -fsS --max-time 2 http://127.0.0.1:$$BINGO_PORT/ping >/dev/null']
+    interval: 2s
+    timeout: 3s
+    retries: 2
+    start_period: 20s
+  stop_grace_period: 10s
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bingo
+      POSTGRES_DB: bingo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    shm_size: 256mb
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U bingo -d bingo]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app1:
+    <<: *app
+    ports:
+      - '127.0.0.1:18081:${BINGO_PORT}'
+
+  app2:
+    <<: *app
+    ports:
+      - '127.0.0.1:18082:${BINGO_PORT}'
+
+  prepare:
+    <<: *app
+    restart: 'no'
+    command: [prepare_db]
+    profiles: [tools]
+    healthcheck:
+      disable: true
+
+  balancer:
+    image: haproxy:3.0-alpine
+    restart: unless-stopped
+    volumes:
+      - ./config/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - '127.0.0.1:18080:8080'
+      - '127.0.0.1:18404:8404'
+    depends_on:
+      app1:
+        condition: service_started
+      app2:
+        condition: service_started
+
+  edge:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - '${SERVER_BIND_IP:-127.0.0.1}:${HTTP_PORT:-80}:80'
+      - '${SERVER_BIND_IP:-127.0.0.1}:443:443/tcp'
+      - '${SERVER_BIND_IP:-127.0.0.1}:443:443/udp'
+    volumes:
+      - ./.state/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - balancer
+      - metrics
+
+  metrics:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    user: '10001:10001'
+    command: [python, /app/metrics_exporter.py]
+    volumes:
+      - ./scripts/metrics_exporter.py:/app/metrics_exporter.py:ro
+    ports:
+      - '127.0.0.1:19100:9100'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=500MB
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '127.0.0.1:19090:9090'
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    ports:
+      - '${SERVER_BIND_IP:-127.0.0.1}:3000:3000'
+    volumes:
+      - ./config/grafana:/etc/grafana/provisioning:ro
+      - ./config/dashboard.json:/var/lib/grafana/dashboards/kinosfera.json:ro
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
