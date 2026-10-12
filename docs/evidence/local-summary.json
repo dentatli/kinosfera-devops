@@ -1,0 +1,176 @@
+{
+  "date": "2026-10-10",
+  "load": {
+    "profiles": [
+      {
+        "method": "POST",
+        "target_rps": 120.0,
+        "arrival_window_seconds": 30.0,
+        "requests": 3600,
+        "successes": 3600,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 120.0,
+        "successful_latency_ms": {
+          "p50": 13.021,
+          "p90": 101.809,
+          "p99": 102.288
+        },
+        "passed": true,
+        "profile": "operation"
+      },
+      {
+        "method": "GET",
+        "target_rps": 120.0,
+        "arrival_window_seconds": 30.0,
+        "requests": 3600,
+        "successes": 3600,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 120.0,
+        "successful_latency_ms": {
+          "p50": 102.014,
+          "p90": 102.273,
+          "p99": 102.867
+        },
+        "passed": true,
+        "profile": "db_dummy"
+      },
+      {
+        "method": "GET",
+        "target_rps": 120.0,
+        "arrival_window_seconds": 30.0,
+        "requests": 3600,
+        "successes": 3600,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 120.0,
+        "successful_latency_ms": {
+          "p50": 0.898,
+          "p90": 1.226,
+          "p99": 1.617
+        },
+        "passed": true,
+        "profile": "movie_by_id"
+      },
+      {
+        "method": "GET",
+        "target_rps": 120.0,
+        "arrival_window_seconds": 30.0,
+        "requests": 3600,
+        "successes": 3600,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 120.0,
+        "successful_latency_ms": {
+          "p50": 0.879,
+          "p90": 1.159,
+          "p99": 1.561
+        },
+        "passed": true,
+        "profile": "customer_by_id"
+      },
+      {
+        "method": "GET",
+        "target_rps": 120.0,
+        "arrival_window_seconds": 30.0,
+        "requests": 3600,
+        "successes": 3600,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 120.0,
+        "successful_latency_ms": {
+          "p50": 0.936,
+          "p90": 1.354,
+          "p99": 1.893
+        },
+        "passed": true,
+        "profile": "session_by_id"
+      },
+      {
+        "method": "GET",
+        "target_rps": 180.0,
+        "arrival_window_seconds": 60.0,
+        "requests": 10800,
+        "successes": 10800,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 180.0,
+        "successful_latency_ms": {
+          "p50": 101.87,
+          "p90": 102.234,
+          "p99": 127.677
+        },
+        "passed": true,
+        "profile": "peak"
+      },
+      {
+        "method": "GET",
+        "target_rps": 60.0,
+        "arrival_window_seconds": 60.0,
+        "requests": 3600,
+        "successes": 3600,
+        "errors": 0,
+        "error_percent": 0.0,
+        "started_rps": 60.0,
+        "successful_latency_ms": {
+          "p50": 102.119,
+          "p90": 102.379,
+          "p99": 102.698
+        },
+        "passed": true,
+        "profile": "stable"
+      }
+    ],
+    "passed": true
+  },
+  "failover": {
+    "kill": {
+      "passed": true,
+      "phases": [
+        {
+          "service": "app1",
+          "fault": "kill",
+          "recovery_seconds": 0.913,
+          "passed": true,
+          "requests": 1200,
+          "errors": 0
+        },
+        {
+          "service": "app2",
+          "fault": "kill",
+          "recovery_seconds": 0.894,
+          "passed": true,
+          "requests": 1200,
+          "errors": 0
+        }
+      ]
+    },
+    "500": {
+      "passed": true,
+      "phases": [
+        {
+          "service": "app1",
+          "fault": "500",
+          "recovery_seconds": 7.285,
+          "passed": true,
+          "requests": 1200,
+          "errors": 0
+        },
+        {
+          "service": "app2",
+          "fault": "500",
+          "recovery_seconds": 7.351,
+          "passed": true,
+          "requests": 1200,
+          "errors": 0
+        }
+      ]
+    }
+  },
+  "cache": {
+    "fast_fraction": 0.9682539682539683,
+    "max_age_seconds": 50.149,
+    "passed": true
+  }
+}

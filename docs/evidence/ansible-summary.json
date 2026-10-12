@@ -1,0 +1,27 @@
+{
+  "controller": "ansible-core 2.20.10, Python 3.12, temporary Docker controller over SSH",
+  "target": "Ubuntu 22.04.5, existing deployment",
+  "syntax_check_passed": true,
+  "first_run": {
+    "ok": 23,
+    "changed": 4,
+    "unreachable": 0,
+    "failed": 0
+  },
+  "second_run": {
+    "ok": 21,
+    "changed": 0,
+    "unreachable": 0,
+    "failed": 0
+  },
+  "postgres_password_preserved": true,
+  "grafana_password_preserved": true,
+  "certificate_preserved": true,
+  "seed_counts_preserved": true,
+  "seed_counts": [
+    29019,
+    500000,
+    5000000
+  ],
+  "fresh_server_installation_tested": false
+}

@@ -1,0 +1,15 @@
+{
+  "timestamp_utc": "2026-10-12T07:16:50.107312+00:00",
+  "target_ip": "94.41.94.5",
+  "target_port": 443,
+  "server_name": "94-41-94-5.sslip.io",
+  "transport": "QUIC/UDP",
+  "http_fallback_enabled": false,
+  "alpn": "h3",
+  "status": "200",
+  "body": "pong\n",
+  "certificate_verified": true,
+  "passed": true,
+  "certificate_sha256": "fcb0ed4d6e897d972ab09c24ff5fbfd7e6ad50e896645c9acbd855364fffd242",
+  "elapsed_seconds": 1.375
+}
